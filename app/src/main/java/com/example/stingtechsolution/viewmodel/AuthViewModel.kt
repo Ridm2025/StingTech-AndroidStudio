@@ -1,9 +1,18 @@
+
 package com.example.stingtechsolution.viewmodel
 
+import android.app.Application
+import android.database.sqlite.SQLiteConstraintException
+import android.util.Patterns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.stingtechsolution.data.database.StingTechDatabase
+import com.example.stingtechsolution.data.repository.UsuarioRepository
+import kotlinx.coroutines.launch
+import com.example.stingtechsolution.data.entity.UsuarioEntity
 
 data class AuthUiState(
     val nombre: String = "",
@@ -14,10 +23,19 @@ data class AuthUiState(
     val errorCorreo: String = "",
     val errorPassword: String = "",
     val errorConfirmacion: String = "",
-    val mensaje: String = ""
+    val mensaje: String = "",
+    val cargando: Boolean = false
 )
 
-class AuthViewModel : ViewModel() {
+class AuthViewModel(
+    application: Application
+) : AndroidViewModel(application) {
+
+    private val repository = UsuarioRepository(
+        StingTechDatabase.obtenerDatabase(
+            application
+        ).usuarioDao()
+    )
 
     var uiState by mutableStateOf(AuthUiState())
         private set
@@ -54,90 +72,156 @@ class AuthViewModel : ViewModel() {
         )
     }
 
+    var usuarioActual by mutableStateOf<UsuarioEntity?>(null)
+        private set
+
+    fun cerrarSesion() {
+        usuarioActual = null
+        limpiarFormulario()
+    }
+
     fun limpiarFormulario() {
         uiState = AuthUiState()
     }
 
-    fun validarLogin(): Boolean {
-        val correo = uiState.correo.trim()
+    private fun validarCampos(
+        esRegistro: Boolean
+    ): Boolean {
+
+        val estado = uiState
+
+        val errorNombre =
+            if (esRegistro && estado.nombre.isBlank())
+                "Ingresa tu nombre"
+            else ""
 
         val errorCorreo = when {
-            correo.isEmpty() -> "Ingresa tu correo"
-            !android.util.Patterns.EMAIL_ADDRESS.matcher(correo).matches() ->
+            estado.correo.isBlank() ->
+                "Ingresa tu correo"
+
+            !Patterns.EMAIL_ADDRESS.matcher(
+                estado.correo.trim()
+            ).matches() ->
                 "Correo electrónico inválido"
-            else -> ""
-        }
 
-        val errorPassword = if (uiState.password.isBlank()) {
-            "Ingresa tu contraseña"
-        } else {
-            ""
-        }
-
-        val valido = errorCorreo.isEmpty() &&
-                errorPassword.isEmpty()
-
-        uiState = uiState.copy(
-            errorCorreo = errorCorreo,
-            errorPassword = errorPassword,
-            mensaje = if (valido)
-                "Formulario válido. Falta verificar la cuenta en Room."
-            else
-                ""
-        )
-
-        return valido
-    }
-
-    fun validarRegistro(): Boolean {
-        val correo = uiState.correo.trim()
-
-        val errorNombre = if (uiState.nombre.isBlank()) {
-            "Ingresa tu nombre"
-        } else {
-            ""
-        }
-
-        val errorCorreo = when {
-            correo.isEmpty() -> "Ingresa tu correo"
-            !android.util.Patterns.EMAIL_ADDRESS.matcher(correo).matches() ->
-                "Correo electrónico inválido"
             else -> ""
         }
 
         val errorPassword = when {
-            uiState.password.isBlank() -> "Ingresa una contraseña"
-            uiState.password.length < 6 ->
-                "La contraseña debe tener al menos 6 caracteres"
+            estado.password.isBlank() ->
+                "Ingresa tu contraseña"
+
+            esRegistro && estado.password.length < 6 ->
+                "Mínimo 6 caracteres"
+
             else -> ""
         }
 
         val errorConfirmacion = when {
-            uiState.confirmarPassword.isBlank() ->
+            !esRegistro -> ""
+
+            estado.confirmarPassword.isBlank() ->
                 "Confirma tu contraseña"
-            uiState.password != uiState.confirmarPassword ->
+
+            estado.password != estado.confirmarPassword ->
                 "Las contraseñas no coinciden"
+
             else -> ""
         }
 
-        val valido = listOf(
+        uiState = estado.copy(
+            errorNombre = errorNombre,
+            errorCorreo = errorCorreo,
+            errorPassword = errorPassword,
+            errorConfirmacion = errorConfirmacion,
+            mensaje = ""
+        )
+
+        return listOf(
             errorNombre,
             errorCorreo,
             errorPassword,
             errorConfirmacion
         ).all { it.isEmpty() }
+    }
 
-        uiState = uiState.copy(
-            errorNombre = errorNombre,
-            errorCorreo = errorCorreo,
-            errorPassword = errorPassword,
-            errorConfirmacion = errorConfirmacion,
-            mensaje = if (valido)
-                "Formulario válido. Falta guardar la cuenta en Room."
-            else
-                ""
-        )
+    fun registrar(onExito: () -> Unit) {
 
-        return valido
+        if (uiState.cargando) return
+        if (!validarCampos(esRegistro = true)) return
+
+        val nombre = uiState.nombre
+        val correo = uiState.correo
+        val password = uiState.password
+
+        uiState = uiState.copy(cargando = true)
+
+        viewModelScope.launch {
+            try {
+                val registrado = repository.registrar(
+                    nombre,
+                    correo,
+                    password
+                )
+
+                if (registrado) {
+                    limpiarFormulario()
+                    onExito()
+                } else {
+                    uiState = uiState.copy(
+                        errorCorreo = "Este correo ya está registrado"
+                    )
+                }
+            } catch (e: Exception) {
+                uiState = uiState.copy(
+                    mensaje = if (
+                        e is SQLiteConstraintException ||
+                        e.cause is SQLiteConstraintException
+                    ) {
+                        "Este correo ya está registrado"
+                    } else {
+                        "No se pudo guardar el usuario"
+                    }
+                )
+            } finally {
+                uiState = uiState.copy(cargando = false)
+            }
+        }
+    }
+
+    fun ingresar(onExito: () -> Unit) {
+
+        if (uiState.cargando) return
+        if (!validarCampos(esRegistro = false)) return
+
+        val correo = uiState.correo
+        val password = uiState.password
+
+        uiState = uiState.copy(cargando = true)
+
+        viewModelScope.launch {
+            try {
+                val correcto = repository.ingresar(
+                    correo,
+                    password
+                )
+
+                if (correcto) {
+                    usuarioActual = repository.obtenerUsuario(correo)
+                    limpiarFormulario()
+                    onExito()
+                } else {
+                    uiState = uiState.copy(
+                        mensaje = "Correo o contraseña incorrectos"
+                    )
+                }
+            } catch (e: Exception) {
+                uiState = uiState.copy(
+                    mensaje = "No se pudo verificar el usuario"
+                )
+            } finally {
+                uiState = uiState.copy(cargando = false)
+            }
+        }
     }
 }

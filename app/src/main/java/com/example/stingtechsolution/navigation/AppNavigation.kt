@@ -20,6 +20,12 @@ import com.example.stingtechsolution.viewmodel.SolicitudViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.example.stingtechsolution.screen.HerramientasScreen
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.stingtechsolution.R
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.example.stingtechsolution.screen.PerfilScreen
 
 @Composable
 fun AppNavigation() {
@@ -46,7 +52,11 @@ fun AppNavigation() {
                     navController.navigate("registro")
                 },
                 onDemo = {
-                    navController.navigate("home")
+                    authViewModel.cerrarSesion()
+
+                    navController.navigate("home") {
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -54,12 +64,23 @@ fun AppNavigation() {
         composable("login") {
             LoginScreen(
                 viewModel = authViewModel,
+
                 onVolver = {
                     navController.popBackStack()
                 },
+
                 onRegistro = {
                     authViewModel.limpiarFormulario()
                     navController.navigate("registro")
+                },
+
+                onIngresar = {
+                    navController.navigate("home") {
+                        popUpTo("bienvenida") {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -67,10 +88,21 @@ fun AppNavigation() {
         composable("registro") {
             RegisterScreen(
                 viewModel = authViewModel,
+
                 onVolver = {
                     navController.popBackStack(
-                        "bienvenida", false
+                        "bienvenida",
+                        false
                     )
+                },
+
+                onRegistroExitoso = {
+                    navController.navigate("login") {
+                        popUpTo("bienvenida") {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -78,15 +110,23 @@ fun AppNavigation() {
         composable("home") {
             HomeScreen(
                 cantidadSolicitudes = solicitudes.size,
+                nombreUsuario = authViewModel.usuarioActual?.nombre,
+
                 onNuevaSolicitud = {
                     solicitudViewModel.limpiarFormulario()
                     navController.navigate("nueva_solicitud")
                 },
+
                 onMisSolicitudes = {
                     navController.navigate("mis_solicitudes")
                 },
+
                 onHerramientas = {
                     navController.navigate("herramientas")
+                },
+
+                onPerfil = {
+                    navController.navigate("perfil")
                 }
             )
         }
@@ -121,6 +161,27 @@ fun AppNavigation() {
             )
         }
 
+        composable("perfil") {
+            PerfilScreen(
+                nombre = authViewModel.usuarioActual?.nombre,
+                correo = authViewModel.usuarioActual?.correo,
+
+                onVolver = {
+                    navController.popBackStack()
+                },
+
+                onCerrarSesion = {
+                    authViewModel.cerrarSesion()
+
+                    navController.navigate("bienvenida") {
+                        popUpTo("bienvenida") {
+                            inclusive = true
+                        }
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -136,10 +197,16 @@ fun PantallaBienvenida(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Text(
-            text = "StingTech",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary
+
+        Image(
+            painter = painterResource(
+                id = R.drawable.logo_stingtech
+            ),
+            contentDescription = "Logo de StingTech Tech Solutions",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp),
+            contentScale = ContentScale.Fit
         )
 
         Text(
@@ -175,9 +242,16 @@ fun PantallaBienvenida(
 
         Button(
             onClick = onDemo,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.secondary
+            )
         ) {
             Text("Probar StingTech (demo)")
         }
+
     }
 }

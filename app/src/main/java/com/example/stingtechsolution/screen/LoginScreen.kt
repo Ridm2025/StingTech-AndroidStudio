@@ -17,8 +17,10 @@ import com.example.stingtechsolution.viewmodel.AuthViewModel
 fun LoginScreen(
     viewModel: AuthViewModel,
     onVolver: () -> Unit,
-    onRegistro: () -> Unit
+    onRegistro: () -> Unit,
+    onIngresar: () -> Unit
 ) {
+
     val estado = viewModel.uiState
 
     Column(
@@ -69,10 +71,20 @@ fun LoginScreen(
         )
 
         Button(
-            onClick = { viewModel.validarLogin() },
+            onClick = {
+                viewModel.ingresar(
+                    onExito = onIngresar
+                )
+            },
+            enabled = !estado.cargando,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Ingresar")
+            Text(
+                if (estado.cargando)
+                    "Verificando..."
+                else
+                    "Ingresar"
+            )
         }
 
         if (estado.mensaje.isNotEmpty()) {

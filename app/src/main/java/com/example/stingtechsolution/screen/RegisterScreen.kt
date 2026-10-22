@@ -16,7 +16,8 @@ import com.example.stingtechsolution.viewmodel.AuthViewModel
 @Composable
 fun RegisterScreen(
     viewModel: AuthViewModel,
-    onVolver: () -> Unit
+    onVolver: () -> Unit,
+    onRegistroExitoso: () -> Unit
 ) {
     val estado = viewModel.uiState
 
@@ -97,16 +98,19 @@ fun RegisterScreen(
         )
 
         Button(
-            onClick = { viewModel.validarRegistro() },
+            onClick = {
+                viewModel.registrar(
+                    onExito = onRegistroExitoso
+                )
+            },
+            enabled = !estado.cargando,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Registrarse")
-        }
-
-        if (estado.mensaje.isNotEmpty()) {
             Text(
-                text = estado.mensaje,
-                color = MaterialTheme.colorScheme.primary
+                if (estado.cargando)
+                    "Registrando..."
+                else
+                    "Registrarse"
             )
         }
 
